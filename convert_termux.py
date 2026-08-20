@@ -9,7 +9,7 @@ Termux 手机版：视频 -> mp3 -> 图床(GitHub) 一键脚本
 """
 import sys, os, json, base64, random, subprocess, urllib.request, urllib.error
 
-REPO = "yshuya530-svg/image-host"
+REPO = "waxymoon/image-host"
 BRANCH = "main"
 TOKEN_FILE = os.path.expanduser("~/.gh_token")
 RAW_BASE = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/"
