@@ -36,6 +36,30 @@ def convert(src, out):
     if r.returncode != 0:
         raise RuntimeError(f"ffmpeg 转换失败: {r.stderr[-300:]}")
 
+def download_to_temp(url):
+    """下载远程文件到 Termux 缓存目录，返回本地路径"""
+    import tempfile, urllib.request
+    from urllib.parse import urlparse
+    ext = os.path.splitext(urlparse(url).path)[1].lower()
+    if ext not in (".mp3", ".mp4", ".mov", ".avi", ".mkv", ".m4a", ".wav", ".flac", ".aac", ".ogg", ".wma"):
+        ext = ".mp3"
+    fd, tmp = tempfile.mkstemp(suffix=ext)
+    os.close(fd)
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=180) as resp, open(tmp, "wb") as f:
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            f.write(chunk)
+    if os.path.getsize(tmp) == 0:
+        os.remove(tmp)
+        raise RuntimeError("下载的文件为空（链接可能失效）")
+    if os.path.getsize(tmp) > 100 * 1024 * 1024:
+        os.remove(tmp)
+        raise RuntimeError("文件超过 100MB，GitHub 上传不了")
+    return tmp
+
 def upload(token, path):
     name = str(random.randint(10000000, 99999999)) + ".mp3"
     url = f"https://api.github.com/repos/{REPO}/contents/{name}"
@@ -74,9 +98,24 @@ def main():
         print("完成！")
         return 0
 
-    files = [a for a in sys.argv[1:] if os.path.isfile(a)]
+    files = []
+    temps = []  # 远程下载的临时文件，处理完自动删
+    for a in sys.argv[1:]:
+        if a.startswith(("http://", "https://")):
+            print(f"▶ 下载远程文件: {a[:80]}")
+            try:
+                tmp = download_to_temp(a)
+                temps.append(tmp)
+                files.append(tmp)
+                print(f"  下载完成 ({os.path.getsize(tmp)//1024} KB)")
+            except Exception as e:
+                print(f"  ❌ 下载失败: {e}")
+        elif os.path.isfile(a):
+            files.append(a)
+        else:
+            print(f"⚠️ 跳过无效输入: {a}")
     if not files:
-        print("没找到有效的文件，检查路径对不对")
+        print("没找到有效的文件，检查路径或链接对不对")
         return 1
 
     token = get_token()
@@ -103,6 +142,15 @@ def main():
             if os.path.exists(tmp):
                 os.remove(tmp)
         print("")
+
+    # 清理远程下载的临时文件（用完即删）
+    for t in temps:
+        try:
+            os.remove(t)
+        except Exception:
+            pass
+    if temps:
+        print(f"(已清理 {len(temps)} 个临时下载文件)")
 
     print("=" * 40)
     print("全部完成！链接已打印在上方，长按终端文字即可复制")
